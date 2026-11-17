@@ -77,12 +77,14 @@ module RedmineAgentConnect
       unless uris.is_a?(Array) && uris.size.between?(1, 10) && uris.all? { |u| u.is_a?(String) && RedirectPolicy.safe?(u) }
         raise Invalid, 'redirect_uris are missing or unsafe'
       end
-      unless [nil, 'none'].include?(document['token_endpoint_auth_method'])
-        raise Invalid, 'only public clients (token_endpoint_auth_method "none") are supported'
-      end
-      grant_types = Array(document['grant_types'] || ['authorization_code'])
-      raise Invalid, 'unsupported grant_types' unless (grant_types - %w[authorization_code refresh_token]).empty?
-      raise Invalid, 'unsupported response_types' unless Array(document['response_types'] || ['code']) == ['code']
+      # A client may prefer another method (ChatGPT declares private_key_jwt)
+      # but must also offer "none": it is registered and treated as public.
+      methods = [document['token_endpoint_auth_method'] || 'none'] + Array(document['token_endpoint_auth_methods_supported'])
+      raise Invalid, 'client does not support public authentication (token_endpoint_auth_method "none")' unless methods.include?('none')
+      # Only the authorization code flow (with refresh) is ever issued; other
+      # declared grant types are ignored.
+      raise Invalid, 'client does not support authorization_code' unless Array(document['grant_types'] || ['authorization_code']).include?('authorization_code')
+      raise Invalid, 'client does not support response_type "code"' unless Array(document['response_types'] || ['code']).include?('code')
 
       name = document['client_name'].is_a?(String) ? document['client_name'].strip.presence : nil
       {name: (name || parse(client_id).host).truncate(255), redirect_uri: uris.uniq.join("\n")}

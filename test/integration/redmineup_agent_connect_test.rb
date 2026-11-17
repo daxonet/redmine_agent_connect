@@ -39,6 +39,21 @@ class RedmineupAgentConnectTest < Redmine::IntegrationTest
     assert JSON.parse(response.body)['registration_endpoint'].end_with?('/agent_connect/register')
   end
 
+  def test_bearer_challenge_when_authentication_is_required
+    Setting.login_required = '1'
+    mcp({jsonrpc: '2.0', id: 1, method: 'ping'})
+    assert_response :unauthorized
+    assert_match(/\ABearer /, response.headers['WWW-Authenticate'])
+    assert_match %r{resource_metadata="http://www.example.com/.well-known/oauth-protected-resource/mcp"},
+                 response.headers['WWW-Authenticate']
+    get '/.well-known/oauth-protected-resource/mcp'
+    assert_response :success
+    get '/projects.json'
+    assert_response :unauthorized # the rest of Redmine still requires authentication
+  ensure
+    Setting.login_required = '0'
+  end
+
   def test_dynamic_registration_to_redmineup_tools
     redirect = 'http://localhost:43123/callback'
     post '/agent_connect/register', params: {client_name: 'Claude Code', redirect_uris: [redirect],

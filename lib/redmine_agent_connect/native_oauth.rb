@@ -114,6 +114,19 @@ Rails.application.config.after_initialize do
     checker < RedmineAgentConnect::RedirectPolicy::LocalhostLoopback
 end
 
+# With "Authentication required" enabled, Redmine core rejects anonymous API
+# requests with a Basic challenge before RedmineUP Agent's /mcp action runs,
+# so clients never see its Bearer resource_metadata pointer (RFC 9728) and
+# may prompt for a password. The action authenticates every request itself.
+# Registered from a plugin init.rb, so use after_initialize (to_prepare hooks
+# added while plugins load do not run in the same boot).
+Rails.application.config.after_initialize do
+  # Referencing the constant autoloads RedmineUP Agent's controller.
+  if Redmine::Plugin.installed?(:redmineup_agent)
+    ::AgentMcpController.skip_before_action :check_if_login_required, only: %i[handle unsupported], raise: false
+  end
+end
+
 class AgentConnectHooks < Redmine::Hook::ViewListener
   render_on :view_layouts_base_content, partial: 'agent_connect/application_authorizations'
 end

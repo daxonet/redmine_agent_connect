@@ -9,7 +9,7 @@ Redmine::Plugin.register :redmine_agent_connect do
   name        'Redmine Agent Connect'
   author      'DAXONET'
   description 'Zero-configuration OAuth sign-in (dynamic registration, client metadata documents) for the RedmineUP Agent MCP server'
-  version     '1.0.0'
+  version     '1.0.1'
   url         'https://github.com/daxonet/redmine_agent_connect'
 
   requires_redmine version_or_higher: '7.0'

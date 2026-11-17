@@ -90,7 +90,8 @@ class ClientMetadataDocumentTest < Redmine::IntegrationTest
 
   def test_invalid_documents_are_rejected
     log_user('jsmith', 'jsmith')
-    [document('client_id' => 'https://claude.ai/other'), document('token_endpoint_auth_method' => 'private_key_jwt'),
+    [document('client_id' => 'https://claude.ai/other'),
+     document('token_endpoint_auth_method' => 'private_key_jwt', 'token_endpoint_auth_methods_supported' => ['private_key_jwt']),
      document('redirect_uris' => ['http://evil.example/cb']), document('redirect_uris' => []),
      document('grant_types' => ['client_credentials']), document('response_types' => ['token']), ['not', 'an', 'object']].each do |doc|
       CIMD.stubs(:fetch).returns(doc)
@@ -99,6 +100,24 @@ class ClientMetadataDocumentTest < Redmine::IntegrationTest
       assert_equal 'invalid_client', JSON.parse(response.body)['error']
     end
     assert_equal 0, Doorkeeper::Application.count
+  end
+
+  # Shape of https://chatgpt.com/oauth/client.json (2026-11): prefers
+  # private_key_jwt, also offers none, and lists an extra jwt-bearer grant.
+  def test_chatgpt_style_document_is_accepted_as_public_client
+    chatgpt = 'https://chatgpt.com/oauth/client.json'
+    mcp_settings('cimd_trusted_hosts' => 'chatgpt.com')
+    CIMD.stubs(:fetch).returns({'client_id' => chatgpt, 'client_name' => 'ChatGPT',
+      'redirect_uris' => ['https://chatgpt.com/connector_platform_oauth_redirect'],
+      'token_endpoint_auth_method' => 'private_key_jwt', 'token_endpoint_auth_methods_supported' => %w[none private_key_jwt],
+      'grant_types' => %w[authorization_code refresh_token urn:ietf:params:oauth:grant-type:jwt-bearer],
+      'response_types' => ['code'], 'jwks_uri' => 'https://chatgpt.com/oauth/jwks.json'})
+    log_user('jsmith', 'jsmith')
+    authorize(chatgpt, redirect_uri: 'https://chatgpt.com/connector_platform_oauth_redirect')
+    assert_response :success
+    app = Doorkeeper::Application.find_by!(uid: chatgpt)
+    assert_equal 'ChatGPT', app.name
+    assert_not app.confidential?
   end
 
   def test_redirect_must_be_listed_in_document
